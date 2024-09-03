@@ -14,7 +14,7 @@ jobs:
           
 
       - name: Install Toolchain
-        uses: actions/setup-go@v5.0.0
+        uses: actions/setup-go@v5.0.2
         with:
           cache: true
 
@@ -27,9 +27,9 @@ jobs:
           tar czvf sing-box.tar.gz ./sing-box
 
       - name: Upload Binaries
-        uses: actions/upload-artifact@v4.3.0
+        uses: actions/upload-artifact@v4.4.0
         with:
-          name: sing-box
+          name: result-sb
           path: ./sing-box.tar.gz
     
           # Duration after which artifact will expire in days. 0 means using default retention. Minimum 1 day. Maximum 90 days unless changed from the repository settings page.
