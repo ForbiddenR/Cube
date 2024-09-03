@@ -8,19 +8,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4
         with:
           repository: zhboner/realm
 
       - name: Install Toolchain
-        uses: actions-rs/toolchain@v1.0.6
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           target: "x86_64-unknown-linux-gnu"
           override: true
 
       - name: Build Server
-        uses: actions-rs/cargo@v1.0.1
+        uses: actions-rs/cargo@v1
         with:
           use-cross: true
           command: build
@@ -34,7 +34,7 @@ jobs:
 #        run: ls -R target/x86_64-unknown-linux-gnu/release/
 
       - name: Upload Binaries
-        uses: actions/upload-artifact@v4.4.0
+        uses: actions/upload-artifact@v4
         with:
           name: realm
           path: target/x86_64-unknown-linux-gnu/release/realm.tar.gz
