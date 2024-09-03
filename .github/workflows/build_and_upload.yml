@@ -24,7 +24,7 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --release --target=x86_64-unknown-linux-gnu
+          args: --release --target=x86_64-unknown-linux-gnu --features 'mi-malloc'
       
 #      - name: Release binaries
 #        uses: ncipollo/release-action@v1
