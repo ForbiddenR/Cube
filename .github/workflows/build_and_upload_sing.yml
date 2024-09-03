@@ -8,15 +8,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4.1.7
         with:
           repository: SagerNet/sing-box
           
 
       - name: Install Toolchain
-        uses: actions/setup-go@v5.0.2
+        uses: actions/setup-go@v5
         with:
           cache: true
+          go-version: ^1.23
 
       - name: Build Server
         run: |

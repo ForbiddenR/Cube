@@ -8,41 +8,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4.1.7
         with:
           repository: zhboner/realm
 
       - name: Install Toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.6
         with:
           toolchain: nightly
           target: "x86_64-unknown-linux-gnu"
           override: true
 
       - name: Build Server
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.1
         with:
           use-cross: true
           command: build
           args: --release --target=x86_64-unknown-linux-gnu --features 'mi-malloc'
       
-#      - name: Release binaries
-#        uses: ncipollo/release-action@v1
-#        with:
-#          artifacts: "target/x86_64-unknown-linux-gnu/release/realm"
-#          tag: "realm"
-#          name: "realm"
-#          allowUpdates: true
-#          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      - name: Zip Binaries
+        run: |
+          tar czvf /target/x86_64-unknown-linux-gnu/release/realm.tar.gz /target/x86_64-unknown-linux-gnu/release/realm   
 
 #      - name: Debug
 #        run: ls -R target/x86_64-unknown-linux-gnu/release/
 
       - name: Upload Binaries
-        uses: actions/upload-artifact@v4.3.0
+        uses: actions/upload-artifact@v4.4.0
         with:
           name: realm
-          path: target/x86_64-unknown-linux-gnu/release/realm
+          path: target/x86_64-unknown-linux-gnu/release/realm.tar.gz
     
           # Duration after which artifact will expire in days. 0 means using default retention. Minimum 1 day. Maximum 90 days unless changed from the repository settings page.
           retention-days: 1
