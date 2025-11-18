@@ -2,15 +2,51 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ForbiddenR/cube/manager"
 	"github.com/ForbiddenR/cube/node"
 	"github.com/ForbiddenR/cube/task"
 	"github.com/ForbiddenR/cube/worker"
+	"github.com/docker/docker/client"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 )
+
+func createContainer() (*task.Docker, *task.DockerResult) {
+	c := task.Config{
+		Name:  "test-container-1",
+		Image: "alpine:latest",
+		Env:   []string{"ENV=production", "DEBUG=false"},
+	}
+
+	dc, _ := client.NewClientWithOpts(client.FromEnv)
+	d := task.Docker{
+		Client: dc,
+		Config: c,
+	}
+
+	result := d.Run()
+	if result.Error != nil {
+		fmt.Printf("%v\n", result.Error)
+		return nil, nil
+	}
+
+	fmt.Printf("Container %s is running with config %v\n", result.ContainerId, c)
+	return &d, &result
+}
+
+func stopContainer(d *task.Docker, id string) *task.DockerResult {
+	result := d.Stop(id)
+	if result.Error != nil {
+		fmt.Printf("%v\n", result.Error)
+		return nil
+	}
+
+	fmt.Printf("Container %s has been stopped and removed\n", id)
+	return &result
+}
 
 func main() {
 	t := task.Task{
@@ -65,4 +101,15 @@ func main() {
 	}
 
 	fmt.Printf("node: %v\n", n)
+
+	fmt.Printf("create a test container\n")
+	dockerTask, createResult := createContainer()
+	if createResult.Error != nil {
+		fmt.Printf("%v", createResult.Error)
+		os.Exit(1)
+	}
+
+	time.Sleep(time.Second * 5)
+	fmt.Printf("stopping container %s\n", createResult.ContainerId)
+	_ = stopContainer(dockerTask, createResult.ContainerId)
 }
