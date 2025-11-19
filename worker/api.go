@@ -22,6 +22,7 @@ func (a *Api) initRouter() {
 	a.Router.HandleFunc("POST /tasks", a.StartTaskHandler)
 	a.Router.HandleFunc("GET /tasks", a.GetTasksHandler)
 	a.Router.HandleFunc("DELETE /tasks/{taskID}", a.StopTaskHandler)
+	a.Router.HandleFunc("GET /stats", a.GetStatsHandler)
 }
 
 func (a *Api) Start() {

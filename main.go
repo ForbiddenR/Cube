@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ForbiddenR/cube/manager"
 	"github.com/ForbiddenR/cube/task"
 	"github.com/ForbiddenR/cube/worker"
 	"github.com/docker/docker/client"
@@ -50,7 +51,7 @@ func stopContainer(d *task.Docker, id string) *task.DockerResult {
 
 func main() {
 	host := os.Getenv("CUBE_HOST")
-	prot, _ := strconv.Atoi(os.Getenv("CUBE_PORT"))
+	port, _ := strconv.Atoi(os.Getenv("CUBE_PORT"))
 
 	fmt.Println("Starting Cube worker")
 
@@ -58,10 +59,47 @@ func main() {
 		Queue: *queue.New(),
 		Db:    make(map[uuid.UUID]*task.Task),
 	}
-	api := worker.Api{Address: host, Port: prot, Worker: &w}
+	api := worker.Api{Address: host, Port: port, Worker: &w}
 
 	go runTasks(&w)
-	api.Start()
+	go w.CollectStats()
+	go api.Start()
+
+	time.Sleep(1 * time.Second)
+
+	workers := []string{fmt.Sprintf("%s:%d", host, port)}
+	m := manager.New(workers)
+
+	for i := range 3 {
+		t := task.Task{
+			ID:    uuid.New(),
+			Name:  fmt.Sprintf("test-container-%d", i),
+			State: task.Scheduled,
+			Image: "strm/helloworld-http",
+		}
+		te := task.TaskEvent{
+			ID:    uuid.New(),
+			State: task.Running,
+			Task:  t,
+		}
+		m.AddTask(te)
+		m.SendWork()
+	}
+
+	go func() {
+		for {
+			fmt.Printf("[Manager] Updating tasks from %d workers\n", len(m.Workers))
+			m.UpdateTasks()
+			time.Sleep(15 * time.Second)
+		}
+	}()
+
+	for {
+		for _, t := range m.TaskDb {
+			fmt.Printf("[Manager] Task: id: %s, state: %d\n", t.ID, t.State)
+			time.Sleep(15 * time.Second)
+		}
+	}
 }
 
 func runTasks(w *worker.Worker) {

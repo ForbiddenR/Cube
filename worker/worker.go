@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"time"
 
 	"github.com/ForbiddenR/cube/task"
@@ -16,19 +15,25 @@ type Worker struct {
 	Name      string
 	Queue     queue.Queue
 	Db        map[uuid.UUID]*task.Task
+	Stats     *Stats
 	TaskCount int
 }
 
 func (w *Worker) GetTasks() []*task.Task {
 	tasks := []*task.Task{}
-	for t := range maps.Values(w.Db) {
+	for _, t := range w.Db {
 		tasks = append(tasks, t)
 	}
 	return tasks
 }
 
 func (w *Worker) CollectStats() {
-	fmt.Println("I will collect stats")
+	for {
+		log.Println("Collecting stats")
+		w.Stats = GetStats()
+		w.Stats.TaskCount = w.TaskCount
+		time.Sleep(15 * time.Second)
+	}
 }
 
 func (w *Worker) RunTask() task.DockerResult {
