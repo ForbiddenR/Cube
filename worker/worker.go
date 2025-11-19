@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"time"
 
 	"github.com/ForbiddenR/cube/task"
@@ -16,6 +17,14 @@ type Worker struct {
 	Queue     queue.Queue
 	Db        map[uuid.UUID]*task.Task
 	TaskCount int
+}
+
+func (w *Worker) GetTasks() []*task.Task {
+	tasks := []*task.Task{}
+	for t := range maps.Values(w.Db) {
+		tasks = append(tasks, t)
+	}
+	return tasks
 }
 
 func (w *Worker) CollectStats() {
