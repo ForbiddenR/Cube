@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/ForbiddenR/cube/task"
 	"github.com/ForbiddenR/cube/worker"
@@ -33,10 +34,10 @@ func New(workers []string) *Manager {
 	}
 
 	return &Manager{
-		Pending: *queue.New(),
-		Workers: workers,
-		TaskDb:  taskDb,
-		EventDb: eventDb,
+		Pending:       *queue.New(),
+		Workers:       workers,
+		TaskDb:        taskDb,
+		EventDb:       eventDb,
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,
 	}
@@ -59,7 +60,26 @@ func (m *Manager) SelectWorker() string {
 	return m.Workers[newWorker]
 }
 
+func (m *Manager) ProcessTasks() {
+	for {
+		log.Println("Processing any tasks to send to workers")
+		m.SendWork()
+		log.Println("Sleeping for 10 seconds")
+		time.Sleep(10 * time.Second)
+	}
+}
+
 func (m *Manager) UpdateTasks() {
+	for {
+		log.Println("Checking for task updates from workers")
+		m.updateTasks()
+		log.Println("Task updates completed")
+		log.Println("Sleeping for 15 seconds")
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (m *Manager) updateTasks() {
 	for _, worker := range m.Workers {
 		log.Printf("Checking worker %v for task updates\n", worker)
 		url := fmt.Sprintf("http://%s/tasks", worker)
@@ -150,4 +170,12 @@ func (m *Manager) SendWork() {
 	} else {
 		log.Println("No work in the queue")
 	}
+}
+
+func (m *Manager) GetTasks() []*task.Task {
+	tasks := []*task.Task{}
+	for _, t := range m.TaskDb {
+		tasks = append(tasks, t)
+	}
+	return tasks
 }
