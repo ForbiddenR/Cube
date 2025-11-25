@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ForbiddenR/cube/node"
+	"github.com/ForbiddenR/cube/scheduler"
 	"github.com/ForbiddenR/cube/task"
 	"github.com/ForbiddenR/cube/worker"
 	"github.com/docker/go-connections/nat"
@@ -25,15 +27,33 @@ type Manager struct {
 	WorkerTaskMap map[string][]uuid.UUID
 	TaskWorkerMap map[uuid.UUID]string
 	LastWorker    int
+	WorkerNdoes   []*node.Node
+	Scheduler     scheduler.Scheduler
 }
 
-func New(workers []string) *Manager {
+func New(workers []string, schedulerType string) *Manager {
 	taskDb := make(map[uuid.UUID]*task.Task)
 	eventDb := make(map[uuid.UUID]*task.TaskEvent)
 	workerTaskMap := make(map[string][]uuid.UUID)
 	taskWorkerMap := make(map[uuid.UUID]string)
+
+	var nodes []*node.Node
 	for worker := range workers {
 		workerTaskMap[workers[worker]] = []uuid.UUID{}
+
+		nAPI := fmt.Sprintf("http://%v", workers[worker])
+		n := node.NewNode(workers[worker], nAPI, "worker")
+		nodes = append(nodes, n)
+	}
+
+	var s scheduler.Scheduler
+	switch schedulerType {
+	case "roundrobin":
+		s = &scheduler.RoundRobin{Name: "roundrobin"}
+	case "epvm":
+		s = &scheduler.Epvm{Name: "epvm"}
+	default:
+		s = &scheduler.RoundRobin{Name: "roundrobin"}
 	}
 
 	return &Manager{
@@ -43,6 +63,8 @@ func New(workers []string) *Manager {
 		EventDb:       eventDb,
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,
+		WorkerNdoes:   nodes,
+		Scheduler:     s,
 	}
 }
 
@@ -50,17 +72,17 @@ func (m *Manager) AddTask(te task.TaskEvent) {
 	m.Pending.Enqueue(te)
 }
 
-func (m *Manager) SelectWorker() string {
-	var newWorker int
-	if m.LastWorker+1 < len(m.Workers) {
-		newWorker = m.LastWorker + 1
-		m.LastWorker++
-	} else {
-		newWorker = 0
-		m.LastWorker = 0
+func (m *Manager) SelectWorker(t task.Task) (*node.Node, error) {
+	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerNdoes)
+	if candidates == nil {
+		msg := fmt.Sprintf("No available candidates match resource request for task %v", t.ID)
+		err := errors.New(msg)
+		return nil, err
 	}
+	scores := m.Scheduler.Score(t, candidates)
+	selectedNode := m.Scheduler.Pick(scores, candidates)
 
-	return m.Workers[newWorker]
+	return selectedNode, nil
 }
 
 func (m *Manager) ProcessTasks() {
@@ -125,16 +147,31 @@ func (m *Manager) updateTasks() {
 
 func (m *Manager) SendWork() {
 	if m.Pending.Len() > 0 {
-		w := m.SelectWorker()
-
 		e := m.Pending.Dequeue()
 		te := e.(task.TaskEvent)
-		t := te.Task
-		log.Printf("Pulled %v off pending queue\n", t)
-
 		m.EventDb[te.ID] = &te
-		m.WorkerTaskMap[w] = append(m.WorkerTaskMap[w], te.Task.ID)
-		m.TaskWorkerMap[t.ID] = w
+		log.Printf("Pulled %v off pending queue\n", te)
+
+		taskWorker, ok := m.TaskWorkerMap[te.Task.ID]
+		if ok {
+			persistedTask := m.TaskDb[te.Task.ID]
+			if te.State == task.Completed && task.ValidStateTransition(persistedTask.State, te.State) {
+				m.stopTask(taskWorker, te.Task.ID.String())
+				return
+			}
+
+			log.Printf("invalid request: existing task %s is in state %v and cannot transition to the completed state\n",
+				persistedTask.ID.String(), persistedTask)
+			return
+		}
+
+		t := te.Task
+		w, err := m.SelectWorker(t)
+		if err != nil {
+			log.Printf("error selecting worker for task %s: %v\n", t.ID, err)
+		}
+		m.WorkerTaskMap[w.Name] = append(m.WorkerTaskMap[w.Name], te.Task.ID)
+		m.TaskWorkerMap[t.ID] = w.Name
 
 		t.State = task.Scheduled
 		m.TaskDb[t.ID] = &t
@@ -144,7 +181,7 @@ func (m *Manager) SendWork() {
 			log.Printf("Unable to marshal task object: %v.\n", t)
 		}
 
-		url := fmt.Sprintf("http://%s/tasks", w)
+		url := fmt.Sprintf("http://%s/tasks", w.Name)
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 		if err != nil {
 			log.Printf("Error connecting to %v: %v\n", w, err)
@@ -182,6 +219,29 @@ func (m *Manager) GetTasks() []*task.Task {
 		tasks = append(tasks, t)
 	}
 	return tasks
+}
+
+func (m *Manager) stopTask(worker, taskID string) {
+	client := &http.Client{}
+	url := fmt.Sprintf("http://%s/tasks/%s", worker, taskID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		log.Printf("error creating request to delete task %s: %v\n", taskID, err)
+		return
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("error connecting to worker at %s: %v\n", url, err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		log.Printf("Error sending request: %v\n", err)
+		return
+	}
+
+	log.Printf("task %s has been scheduled to be stopped\n", taskID)
 }
 
 func (m *Manager) checkTaskHealth(t task.Task) error {
