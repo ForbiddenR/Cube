@@ -1,0 +1,7 @@
+#!bin/bash
+
+CUBE_WORKER_HOST=0.0.0.0 \
+    CUBE_WORKER_PORT=5555 \
+    CUBE_MANAGER_HOST=0.0.0.0 \
+    CUBE_MANAGER_PORT=5556 \
+    go run .
